@@ -1,0 +1,47 @@
+name: Deploy Workflow
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.REGISTRY_TOKEN }}" | docker login -u "${{ secrets.REGISTRY_USER }}" --password-stdin
+
+      - name: Build Docker image
+        run: |
+          docker build -t jyldyz0610/cmsbackend:latest -f Dockerfile.backend .
+          docker push jyldyz0610/cmsbackend:latest
+          docker build -t jyldyz0610/cmsdatabase:latest -f Dockerfile.db .
+          docker push jyldyz0610/cmsdatabase:latest
+          docker build -t jyldyz0610/cmsfrontend:latest -f Dockerfile.frontend .
+          docker push jyldyz0610/cmsfrontend:latest
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH and Docker setup
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.AWS_PUBLIC_IP }}
+          username: ec2-user
+          key: ${{ secrets.AWS_SECRET_KEY }}
+          script: |
+            sudo yum update
+            sudo yum search docker
+            sudo yum install docker docker-compose -y
+            sudo systemctl start docker
+            sudo systemctl enable docker
+            # if sudo docker ps -a  --filter name=cms | grep cms; then sudo docker stop cms && sudo docker rm cms; else echo 'CMS container does not exist, skipping stop operation.'; fi
+            sudo docker-compose up
+  
+            # sudo docker run -d --name cms -p 80:3000 jyldyz0610/projecktcms-image:latest
+            sudo docker ps
